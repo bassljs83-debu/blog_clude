@@ -28,6 +28,23 @@ load_dotenv()
 MODEL = os.environ.get("GENERATOR_MODEL", "claude-opus-4-8")
 OUTPUT_DIR = pathlib.Path(__file__).parent / "output"
 
+# 구글 애드센스 인아티클 광고 (본문 중간 삽입).
+# 로더(AD_LOADER)는 페이지당 한 번만, 광고 유닛(AD_UNIT)은 위치마다 반복.
+AD_LOADER = (
+    '<script async '
+    'src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
+    '?client=ca-pub-3490922798785546" crossorigin="anonymous"></script>'
+)
+AD_UNIT = """<ins class="adsbygoogle"
+     style="display:block; text-align:center;"
+     data-ad-layout="in-article"
+     data-ad-format="fluid"
+     data-ad-client="ca-pub-3490922798785546"
+     data-ad-slot="4352988067"></ins>
+<script>
+(adsbygoogle = window.adsbygoogle || []).push({});
+</script>"""
+
 DRAFT_SYSTEM = """당신은 한국어 생활/가전 블로그 SEO 전문 작가입니다.
 쿠팡 파트너스 로켓배송 상품 목록을 받아, 구글 상위노출에 강한 "정보/비교/구매가이드형" 글을 씁니다.
 
@@ -121,7 +138,7 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     md_path = OUTPUT_DIR / f"{stamp}_{safe}.md"
     html_path = OUTPUT_DIR / f"{stamp}_{safe}.html"
     md_path.write_text(final, encoding="utf-8")
-    html_path.write_text(md_to_html(final), encoding="utf-8")
+    html_path.write_text(insert_ads(md_to_html(final)), encoding="utf-8")
     return html_path
 
 
@@ -131,6 +148,30 @@ def md_to_html(md_text: str) -> str:
     표(tables)와 리스트를 제대로 렌더링하도록 확장 지정.
     """
     return markdown.markdown(md_text, extensions=["tables", "sane_lists"])
+
+
+def insert_ads(html: str) -> str:
+    """본문 섹션(<h2>) 사이 클릭 잘 나오는 위치에 애드센스 광고를 삽입.
+
+    - 제목/도입부 위에는 넣지 않음 (애드센스 정책·UX)
+    - 한 글에 최대 3개, 첫 섹션 뒤 / 중간 / FAQ 직전에 분산
+    - 로더는 맨 위 광고 1회만
+    """
+    positions = [m.start() for m in re.finditer(r"<h2", html)]
+    if len(positions) < 2:  # 섹션이 거의 없으면 끝에 하나만
+        return f"{html}\n{AD_LOADER}\n{AD_UNIT}"
+
+    n = len(positions)
+    targets = sorted({1, n // 2, n - 1})  # 첫 섹션 뒤·중간·마지막(FAQ) 앞
+    targets = [i for i in targets if 1 <= i <= n - 1][:3]
+    first = targets[0]
+
+    out = html
+    for i in sorted(targets, reverse=True):  # 뒤에서부터 삽입해 앞 오프셋 유지
+        block = f"{AD_LOADER}\n{AD_UNIT}" if i == first else AD_UNIT
+        pos = positions[i]
+        out = f"{out[:pos]}{block}\n{out[pos:]}"
+    return out
 
 
 if __name__ == "__main__":
