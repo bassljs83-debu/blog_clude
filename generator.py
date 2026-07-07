@@ -142,6 +142,10 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     html = insert_product_cards(html, products)  # 도입부 뒤 상품 카드 갤러리
     html = insert_ads(html)  # 섹션 사이 애드센스
     html_path.write_text(html, encoding="utf-8")
+
+    # 태그 추천 저장 (티스토리 태그 칸에 붙여넣기용, 쉼표 구분)
+    tags = suggest_tags(keyword, products)
+    (OUTPUT_DIR / f"{stamp}_{safe}_태그.txt").write_text(", ".join(tags), encoding="utf-8")
     return html_path
 
 
@@ -151,6 +155,30 @@ def md_to_html(md_text: str) -> str:
     표(tables)와 리스트를 제대로 렌더링하도록 확장 지정.
     """
     return markdown.markdown(md_text, extensions=["tables", "sane_lists"])
+
+
+def suggest_tags(keyword: str, products: list[dict], limit: int = 12) -> list[str]:
+    """키워드 + 검색의도 + 브랜드명으로 티스토리 태그를 추천."""
+    tags = [keyword]
+    for modifier in ("추천", "비교", "순위", "가격", "후기"):
+        tags.append(f"{keyword}{modifier}")
+
+    # 상품명 첫 단어를 브랜드 후보로 (한글/영문 2~6자만, 잡토큰 제외)
+    for p in products:
+        name = p.get("productName", "").split()
+        first = name[0] if name else ""
+        if 2 <= len(first) <= 6 and re.fullmatch(r"[A-Za-z가-힣]+", first):
+            brand_tag = f"{first}{keyword}"
+            if brand_tag not in tags:
+                tags.append(brand_tag)
+
+    # 중복 제거(순서 유지) 후 제한
+    seen, out = set(), []
+    for t in tags:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out[:limit]
 
 
 def product_cards_html(products: list[dict]) -> str:
@@ -228,3 +256,6 @@ if __name__ == "__main__":
     out = generate_article(kw)
     print(f"✅ 저장됨(HTML, 티스토리 HTML 모드에 붙여넣기): {out}")
     print(f"   원본 마크다운: {out.with_suffix('.md')}")
+    tag_file = out.parent / f"{out.stem}_태그.txt"
+    if tag_file.exists():
+        print(f"   추천 태그: {tag_file.read_text(encoding='utf-8')}")
