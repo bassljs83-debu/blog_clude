@@ -1,0 +1,25 @@
+# 비밀키 — 절대 커밋 금지 (각 컴퓨터 로컬 보관)
+.env
+config.py
+*.key
+
+# 생성물 / 로그 (연속성에 불필요)
+output/
+logs/
+*.log
+logs/pending_articles.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# OS / 에디터
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code 로컬 설정
+.claude/settings.local.json
