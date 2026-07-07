@@ -17,6 +17,7 @@ import pathlib
 import re
 
 import anthropic
+import markdown
 from dotenv import load_dotenv
 
 from coupang import CoupangClient
@@ -113,13 +114,23 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     # 2차: 검증·교정
     final = _complete(client, CRITIC_SYSTEM, draft) if verify else draft
 
-    # 저장
+    # 저장: .md(편집·참고용) + .html(티스토리 HTML 모드 붙여넣기용)
     OUTPUT_DIR.mkdir(exist_ok=True)
     safe = re.sub(r"[^\w가-힣]+", "_", keyword).strip("_")
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = OUTPUT_DIR / f"{stamp}_{safe}.md"
-    path.write_text(final, encoding="utf-8")
-    return path
+    md_path = OUTPUT_DIR / f"{stamp}_{safe}.md"
+    html_path = OUTPUT_DIR / f"{stamp}_{safe}.html"
+    md_path.write_text(final, encoding="utf-8")
+    html_path.write_text(md_to_html(final), encoding="utf-8")
+    return html_path
+
+
+def md_to_html(md_text: str) -> str:
+    """마크다운을 티스토리 HTML 모드에 붙여넣을 HTML 조각으로 변환.
+
+    표(tables)와 리스트를 제대로 렌더링하도록 확장 지정.
+    """
+    return markdown.markdown(md_text, extensions=["tables", "sane_lists"])
 
 
 if __name__ == "__main__":
@@ -128,6 +139,5 @@ if __name__ == "__main__":
     kw = sys.argv[1] if len(sys.argv) > 1 else "제습기"
     print(f"'{kw}' 글 생성 중... (모델: {MODEL})")
     out = generate_article(kw)
-    print(f"✅ 저장됨: {out}")
-    print("\n--- 미리보기 (앞부분) ---")
-    print(out.read_text(encoding="utf-8")[:1200])
+    print(f"✅ 저장됨(HTML, 티스토리 HTML 모드에 붙여넣기): {out}")
+    print(f"   원본 마크다운: {out.with_suffix('.md')}")
