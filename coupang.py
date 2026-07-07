@@ -24,6 +24,9 @@ load_dotenv()
 BASE_URL = "https://api-gateway.coupang.com"
 API_PREFIX = "/v2/providers/affiliate_open_api/apis/openapi/v1"
 
+# 상품 검색 API 의 limit 최대값 (실측: 10까지만 허용, 11부터 400)
+SEARCH_MAX_LIMIT = 10
+
 
 def _generate_authorization(
     method: str,
@@ -79,15 +82,27 @@ class CoupangClient:
             timeout=15,
         )
         resp.raise_for_status()
-        return resp.json()
+        payload = resp.json()
+        # 쿠팡은 HTTP 200 안에 rCode 로 에러를 담아 보낸다. rCode 0 이 성공.
+        # (rMessage 는 성공 시에도 대가성 문구 안내가 담겨오므로 rCode 로만 판단)
+        r_code = payload.get("rCode")
+        if r_code is not None and str(r_code) != "0":
+            raise RuntimeError(
+                f"쿠팡 API 오류 [rCode={r_code}]: {payload.get('rMessage')}"
+            )
+        return payload
 
     # ------------------------------------------------------------------ #
     # 상품 조회 API
     # ------------------------------------------------------------------ #
     def search_products(
-        self, keyword: str, limit: int = 20, rocket_only: bool = True
+        self, keyword: str, limit: int = SEARCH_MAX_LIMIT, rocket_only: bool = True
     ) -> list[dict]:
-        """키워드로 상품 검색. rocket_only=True 면 로켓배송만 반환."""
+        """키워드로 상품 검색. rocket_only=True 면 로켓배송만 반환.
+
+        limit 은 SEARCH_MAX_LIMIT(10) 을 넘으면 400 이므로 자동으로 클램프한다.
+        """
+        limit = min(limit, SEARCH_MAX_LIMIT)
         query = urlencode({"keyword": keyword, "limit": limit})
         path = f"{API_PREFIX}/products/search?{query}"
         data = self._request("GET", path)
