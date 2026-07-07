@@ -138,7 +138,10 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     md_path = OUTPUT_DIR / f"{stamp}_{safe}.md"
     html_path = OUTPUT_DIR / f"{stamp}_{safe}.html"
     md_path.write_text(final, encoding="utf-8")
-    html_path.write_text(insert_ads(md_to_html(final)), encoding="utf-8")
+    html = md_to_html(final)
+    html = insert_product_cards(html, products)  # 도입부 뒤 상품 카드 갤러리
+    html = insert_ads(html)  # 섹션 사이 애드센스
+    html_path.write_text(html, encoding="utf-8")
     return html_path
 
 
@@ -148,6 +151,49 @@ def md_to_html(md_text: str) -> str:
     표(tables)와 리스트를 제대로 렌더링하도록 확장 지정.
     """
     return markdown.markdown(md_text, extensions=["tables", "sane_lists"])
+
+
+def product_cards_html(products: list[dict]) -> str:
+    """상품 목록을 썸네일 카드 갤러리 HTML 로 변환 (이미지+상품명+가격+구매버튼)."""
+    cards = []
+    for p in products:
+        name = p.get("productName", "")
+        img = p.get("productImage", "")
+        url = p.get("productUrl", "")
+        price = p.get("productPrice")
+        price_str = f"{int(price):,}원" if isinstance(price, (int, float)) else ""
+        if not (img and url):
+            continue
+        cards.append(
+            '<div style="flex:1 1 150px;max-width:180px;border:1px solid #eee;'
+            'border-radius:8px;padding:10px;text-align:center;">'
+            f'<a href="{url}" target="_blank" rel="nofollow sponsored" '
+            'style="text-decoration:none;color:inherit;">'
+            f'<img src="{img}" alt="{name}" '
+            'style="width:100%;height:auto;border-radius:4px;" loading="lazy">'
+            f'<div style="font-size:13px;margin-top:8px;line-height:1.3;">{name}</div>'
+            f'<div style="font-weight:bold;margin-top:4px;color:#c0392b;">{price_str}</div>'
+            '<div style="margin-top:6px;font-size:12px;color:#2980b9;">최저가 보기 ›</div>'
+            "</a></div>"
+        )
+    if not cards:
+        return ""
+    return (
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;margin:20px 0;'
+        'justify-content:center;">' + "".join(cards) + "</div>"
+    )
+
+
+def insert_product_cards(html: str, products: list[dict]) -> str:
+    """도입부(첫 요약) 다음, 첫 <h2> 앞에 상품 카드 갤러리를 삽입."""
+    gallery = product_cards_html(products)
+    if not gallery:
+        return html
+    m = re.search(r"<h2", html)
+    if not m:
+        return html + gallery
+    pos = m.start()
+    return f"{html[:pos]}{gallery}\n{html[pos:]}"
 
 
 def insert_ads(html: str) -> str:
