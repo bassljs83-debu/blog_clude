@@ -53,15 +53,31 @@ def main() -> None:
 
         stem = html_path.stem
         folder = html_path.parent
+
+        # HTML을 클립보드에 복사 (티스토리 HTML 모드에 바로 붙여넣기)
+        copied = False
+        try:
+            subprocess.run(
+                ["pbcopy"], input=html_path.read_bytes(), check=True
+            )
+            copied = True
+        except Exception:
+            pass
+
         print("\n✅ 완료!")
+        if copied:
+            print("   📋 글 HTML이 클립보드에 복사됨 → 티스토리 HTML 모드에 ⌘V 붙여넣기!")
         print(f"   📄 글(HTML)   : {html_path.name}")
         print(f"   🏷  태그        : {stem}_태그.txt")
         print(f"   🖼  썸네일      : {stem}_thumb.png")
         print(f"   📁 폴더        : {folder}")
 
-        # 결과 폴더 열기 (맥)
+        # 결과 폴더 열기 + 썸네일 미리보기 (맥)
         try:
             subprocess.run(["open", str(folder)], check=False)
+            thumb = folder / f"{stem}_thumb.png"
+            if thumb.exists():
+                subprocess.run(["open", str(thumb)], check=False)
         except Exception:
             pass
 
