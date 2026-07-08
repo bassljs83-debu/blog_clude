@@ -22,6 +22,7 @@ import markdown
 from dotenv import load_dotenv
 
 from coupang import CoupangClient
+from thumbnail import make_thumbnail
 
 load_dotenv()
 
@@ -153,6 +154,19 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     (OUTPUT_DIR / f"{stamp}_{safe}_products.json").write_text(
         json.dumps(products, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+    # 대표 썸네일 (제목 + 대표 상품 이미지)
+    title_m = re.search(r"^#\s*(.+)", final, re.M)
+    title = title_m.group(1).strip() if title_m else keyword
+    try:
+        make_thumbnail(
+            title,
+            OUTPUT_DIR / f"{stamp}_{safe}_thumb.png",
+            keyword=keyword,
+            product_image_url=products[0].get("productImage"),
+        )
+    except Exception as e:  # 썸네일 실패해도 글은 살림
+        print(f"(썸네일 생성 실패: {e})")
     return html_path
 
 
@@ -347,3 +361,6 @@ if __name__ == "__main__":
     tag_file = out.parent / f"{out.stem}_태그.txt"
     if tag_file.exists():
         print(f"   추천 태그: {tag_file.read_text(encoding='utf-8')}")
+    thumb_file = out.parent / f"{out.stem}_thumb.png"
+    if thumb_file.exists():
+        print(f"   대표 썸네일: {thumb_file}")
