@@ -6,10 +6,24 @@
 
 from __future__ import annotations
 
+import pathlib
+import random
 import subprocess
 import sys
 
 from generator import generate_article
+
+CATEGORIES_FILE = pathlib.Path(__file__).parent / "categories.txt"
+
+
+def auto_keyword() -> str:
+    """categories.txt 에서 주제를 하나 자동 선택."""
+    lines = [
+        ln.strip()
+        for ln in CATEGORIES_FILE.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.startswith("#")
+    ]
+    return random.choice(lines) if lines else "제습기"
 
 
 def main() -> None:
@@ -18,13 +32,17 @@ def main() -> None:
     print("=" * 44)
     print("주제(키워드)를 입력하면 글·태그·썸네일이 자동 생성됩니다.")
     print("예: 제습기, 무선청소기, 가습기, 에어프라이어 ...")
-    print("(그냥 엔터 = 종료)\n")
+    print("• 그냥 엔터 = 자동으로 주제 골라서 생성")
+    print("• 'q' 입력 = 종료\n")
 
     while True:
-        keyword = input("👉 주제 키워드: ").strip()
-        if not keyword:
+        raw = input("👉 주제 키워드 (엔터=자동, q=종료): ").strip()
+        if raw.lower() == "q":
             print("종료합니다.")
             return
+        keyword = raw or auto_keyword()
+        if not raw:
+            print(f"🎲 자동 선택된 주제: {keyword}")
 
         print(f"\n⏳ '{keyword}' 글 생성 중... (1~2분 걸립니다. 잠시만요)\n")
         try:
