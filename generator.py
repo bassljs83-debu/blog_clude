@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import pathlib
 import re
@@ -140,12 +141,18 @@ def generate_article(keyword: str, product_limit: int = 10, verify: bool = True)
     md_path.write_text(final, encoding="utf-8")
     html = md_to_html(final)
     html = insert_product_cards(html, products)  # 도입부 뒤 상품 카드 갤러리
+    html = enhance_tables(html, products)  # 표 제품명 링크화 + 좌우 스크롤
     html = insert_ads(html)  # 섹션 사이 애드센스
     html_path.write_text(html, encoding="utf-8")
 
     # 태그 추천 저장 (티스토리 태그 칸에 붙여넣기용, 쉼표 구분)
     tags = suggest_tags(keyword, products)
     (OUTPUT_DIR / f"{stamp}_{safe}_태그.txt").write_text(", ".join(tags), encoding="utf-8")
+
+    # 사용한 상품 데이터 저장 (나중에 재조립해도 카드·표·링크가 어긋나지 않게)
+    (OUTPUT_DIR / f"{stamp}_{safe}_products.json").write_text(
+        json.dumps(products, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return html_path
 
 
@@ -222,6 +229,82 @@ def insert_product_cards(html: str, products: list[dict]) -> str:
         return html + gallery
     pos = m.start()
     return f"{html[:pos]}{gallery}\n{html[pos:]}"
+
+
+def _match_product_url(cell_text: str, products: list[dict]) -> str | None:
+    """표 셀 텍스트를 상품과 매칭해 URL 반환 (모델명·토큰 겹침 기준)."""
+    best_url, best_score = None, 0
+    ctokens = set(re.findall(r"[A-Za-z가-힣0-9]+", cell_text))
+    for p in products:
+        name = p.get("productName", "")
+        url = p.get("productUrl", "")
+        if not url:
+            continue
+        score = 0
+        # 모델명 토큰(영문+숫자, 예: LM-CSJ-01, DB-DH7)이 셀에 그대로 있으면 강한 매칭
+        for mt in re.findall(r"[A-Za-z][-A-Za-z0-9]*\d[-A-Za-z0-9]*", name):
+            if len(mt) >= 4 and mt in cell_text:
+                score += 5
+        # 브랜드(첫 단어)가 셀에 있으면 강한 신호 (브랜드는 대체로 고유)
+        first_word = name.split()[0] if name.split() else ""
+        if first_word and first_word in ctokens:
+            score += 3
+        # 이름 토큰 겹침
+        ptokens = set(re.findall(r"[A-Za-z가-힣0-9]+", name))
+        score += len(ptokens & ctokens)
+        if score > best_score:
+            best_score, best_url = score, url
+    return best_url if best_score >= 2 else None
+
+
+def _linkify_first_cell(row_html: str, products: list[dict]) -> str:
+    """행의 첫 <td> 텍스트를 상품 링크로 감싼다 (이미 링크면 skip)."""
+    m = re.search(r"(<td[^>]*>)(.*?)(</td>)", row_html, flags=re.S)
+    if not m:
+        return row_html  # 헤더행(<th>) 등은 건너뜀
+    inner = m.group(2)
+    if "<a" in inner:
+        return row_html
+    cell_text = re.sub(r"<[^>]+>", "", inner)
+    url = _match_product_url(cell_text, products)
+    if not url:
+        return row_html
+    linked = (
+        f'<a href="{url}" target="_blank" rel="nofollow sponsored" '
+        f'style="color:#2980b9;text-decoration:underline;">{inner}</a>'
+    )
+    return row_html[: m.start(2)] + linked + row_html[m.end(2) :]
+
+
+def enhance_tables(html: str, products: list[dict]) -> str:
+    """표: 제품명 링크화 + 좌우 스크롤 + 줄바꿈 방지 + 셀 스타일."""
+
+    def process(match: "re.Match") -> str:
+        table = match.group(0)
+        table = table.replace(
+            "<td>", '<td style="padding:8px 12px;border:1px solid #ddd;">'
+        ).replace(
+            "<th>",
+            '<th style="padding:8px 12px;border:1px solid #ddd;background:#f6f6f6;">',
+        )
+        table = re.sub(
+            r"<tr>.*?</tr>",
+            lambda r: _linkify_first_cell(r.group(0), products),
+            table,
+            flags=re.S,
+        )
+        table = re.sub(
+            r"<table[^>]*>",
+            '<table style="border-collapse:collapse;min-width:640px;'
+            'white-space:nowrap;">',
+            table,
+        )
+        return (
+            '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;'
+            f'margin:16px 0;">{table}</div>'
+        )
+
+    return re.sub(r"<table.*?</table>", process, html, flags=re.S)
 
 
 def insert_ads(html: str) -> str:
