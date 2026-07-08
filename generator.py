@@ -214,20 +214,25 @@ def product_cards_html(products: list[dict]) -> str:
     if not cards:
         return ""
     return (
-        '<div style="display:flex;flex-wrap:wrap;gap:12px;margin:20px 0;'
+        '<h3 style="margin:28px 0 8px;">이 글에서 소개한 상품 바로가기</h3>'
+        '<div style="display:flex;flex-wrap:wrap;gap:12px;margin:8px 0 20px;'
         'justify-content:center;">' + "".join(cards) + "</div>"
     )
 
 
 def insert_product_cards(html: str, products: list[dict]) -> str:
-    """도입부(첫 요약) 다음, 첫 <h2> 앞에 상품 카드 갤러리를 삽입."""
+    """스펙 비교표(첫 </table>) 아래에 상품 카드 갤러리를 삽입."""
     gallery = product_cards_html(products)
     if not gallery:
         return html
+    marker = "</table>"
+    idx = html.find(marker)
+    if idx != -1:  # 비교표 바로 다음
+        pos = idx + len(marker)
+        return f"{html[:pos]}\n{gallery}{html[pos:]}"
+    # 표가 없으면 첫 <h2> 앞(폴백)
     m = re.search(r"<h2", html)
-    if not m:
-        return html + gallery
-    pos = m.start()
+    pos = m.start() if m else len(html)
     return f"{html[:pos]}{gallery}\n{html[pos:]}"
 
 
